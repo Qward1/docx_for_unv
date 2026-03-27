@@ -19,6 +19,7 @@ ET.register_namespace("xml", XML_NS)
 DOCUMENT_XML_PATH = "word/document.xml"
 BODY_PLACEHOLDER_START = "{{BODY_START}}"
 BODY_PLACEHOLDER_END = "{{BODY_END}}"
+REMOVE_ATTR = "__remove__"
 
 
 def render_docx(template_path: Path, data: LetterData) -> bytes:
@@ -38,6 +39,8 @@ def render_docx(template_path: Path, data: LetterData) -> bytes:
     )
     replace_signature_department(root, data)
     replace_body_paragraphs(root, data.body_paragraphs)
+    mark_remaining_placeholder_paragraphs(root)
+    remove_marked_paragraphs(root)
     tighten_trailing_layout(root, data)
     turn_red_text_black(root)
 
@@ -61,17 +64,29 @@ def replace_special_paragraphs(root: ET.Element, data: LetterData) -> None:
     for paragraph in root.findall(".//w:p", NS):
         current = paragraph_text(paragraph)
         if current == "{{RECIPIENT_BLOCK}}":
-            rewrite_recipient_paragraph(paragraph, data.recipient_block)
+            if data.recipient_block.strip():
+                rewrite_recipient_paragraph(paragraph, data.recipient_block)
+            else:
+                mark_paragraph_for_removal(paragraph)
         elif current == "{{SUBJECT_TITLE}}":
-            rewrite_subject_title_paragraph(paragraph, data.subject_title)
+            if data.subject_title.strip():
+                rewrite_subject_title_paragraph(paragraph, data.subject_title)
+            else:
+                mark_paragraph_for_removal(paragraph)
         elif current == "{{REFERENCE_CAPTION}}":
-            rewrite_reference_caption_paragraph(paragraph, data.reference_caption)
+            if data.reference_caption.strip():
+                rewrite_reference_caption_paragraph(paragraph, data.reference_caption)
+            else:
+                mark_paragraph_for_removal(paragraph)
         elif current == "{{SALUTATION}}":
-            rewrite_paragraph(paragraph, data.salutation)
+            if data.salutation.strip():
+                rewrite_paragraph(paragraph, data.salutation)
+            else:
+                mark_paragraph_for_removal(paragraph)
         elif "{{BODY_ECP}}" in current:
-            rewrite_paragraph(paragraph, "")
+            mark_paragraph_for_removal(paragraph)
         elif current == "{{BODY_EXEC}}":
-            rewrite_paragraph(paragraph, "")
+            mark_paragraph_for_removal(paragraph)
 
 
 def replace_body_paragraphs(root: ET.Element, paragraphs: list[str]) -> None:
@@ -274,6 +289,27 @@ def collapse_empty_paragraphs(
 
     for index in reversed(empty_indexes[:-keep]):
         body.remove(children[index])
+
+
+def mark_remaining_placeholder_paragraphs(root: ET.Element) -> None:
+    for paragraph in root.findall(".//w:p", NS):
+        if contains_placeholder(paragraph_text(paragraph)):
+            mark_paragraph_for_removal(paragraph)
+
+
+def contains_placeholder(text: str) -> bool:
+    return "{{" in text and "}}" in text
+
+
+def mark_paragraph_for_removal(paragraph: ET.Element) -> None:
+    paragraph.set(REMOVE_ATTR, "1")
+
+
+def remove_marked_paragraphs(root: ET.Element) -> None:
+    for parent in root.iter():
+        for child in list(parent):
+            if child.tag == w_tag("p") and child.get(REMOVE_ATTR) == "1":
+                parent.remove(child)
 
 
 def is_plain_empty_paragraph(node: ET.Element) -> bool:
