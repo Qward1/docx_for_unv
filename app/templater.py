@@ -150,10 +150,10 @@ def rewrite_recipient_paragraph(paragraph: ET.Element, recipient_block: str) -> 
         paragraph.append(build_text_run(run_props, ""))
         return
 
-    paragraph.append(build_control_run(run_props, "br", {"type": "column"}))
-    paragraph.append(build_text_run(run_props, f"{lines[0]} "))
-    if len(lines) > 1:
-        paragraph.append(build_text_run(run_props, lines[1]))
+    paragraph.append(build_text_run(run_props, lines[0]))
+    for line in lines[1:]:
+        paragraph.append(build_control_run(run_props, "br"))
+        paragraph.append(build_text_run(run_props, line))
 
 
 def rewrite_subject_title_paragraph(paragraph: ET.Element, subject_title: str) -> None:
